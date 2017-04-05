@@ -42,7 +42,7 @@
             [metrics.meters :as meters]
             [metrics.timers :as timers]
             [plumbing.core :as pc :refer (map-vals)])
-  (import [com.netflix.fenzo ConstraintEvaluator ConstraintEvaluator$Result TaskAssignmentResult TaskRequest
+  (:import [com.netflix.fenzo ConstraintEvaluator ConstraintEvaluator$Result TaskAssignmentResult TaskRequest
                              TaskScheduler TaskScheduler$Builder VirtualMachineLease VirtualMachineLease$Range
                              VirtualMachineCurrentState]
           [com.netflix.fenzo.functions Action1 Func1]
