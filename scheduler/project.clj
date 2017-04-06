@@ -140,7 +140,7 @@
    {:dependencies [[clj-http-fake "1.0.1"]
                    [org.mockito/mockito-core "1.10.19"]
                    [twosigma/cook-jobclient "0.1.2-SNAPSHOT"]
-                   [org.clojure/test.check "0.6.1"]
+                   [org.clojure/test.check "0.9.0"]
                    [log4j/log4j "1.2.17" :exclusions  [javax.mail/mail
                                                        javax.jms/jms
                                                        com.sun.jdmk/jmxtools

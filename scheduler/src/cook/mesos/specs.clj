@@ -4,7 +4,7 @@
             [clojure.string :as str]
             [clojure.test :refer :all]))
 
-(defn- pos-double?
+(defn pos-double?
   "Returns true if n is a positive double"
   [n]
   (and (pos? n) (double? n)))
@@ -117,3 +117,23 @@
   (api/make-job-txn {:foo 1
                      :bar 2
                      :baz 3}))
+
+(defn- validate-job
+  "TODO(DPO)"
+  [job]
+  (let [task-constraints {:cpus (-> job :cpus inc)
+                          :memory-gb (-> job :mem (/ 1024) inc)}]
+    (api/validate-and-munge-job nil "alice" task-constraints nil nil job)))
+
+(deftest test-validate-and-munge-job
+
+  (is (validate-job (minimal-job)))
+
+  ;; command
+  (is (validate-job (assoc (minimal-job) :command "this is a command, and it must be a string")))
+  (is (thrown? Throwable (validate-job (assoc (minimal-job) :command 1))))
+  (is (thrown? Throwable (validate-job (assoc (minimal-job) :command true))))
+  (is (thrown? Throwable (validate-job (assoc (minimal-job) :command {}))))
+
+  ;; cpus
+  (is (validate-job (assoc (minimal-job) :cpus "this is a command, and it must be a string"))))
