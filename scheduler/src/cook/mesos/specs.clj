@@ -1,36 +1,28 @@
 (ns cook.mesos.specs
   (:require [clojure.spec :as s]
-            [cook.mesos.api :as api]
+            [clojure.spec.gen :as gen]
             [clojure.string :as str]
-            [clojure.test :refer :all]))
-
-(defn pos-double?
-  "Returns true if n is a positive double"
-  [n]
-  (and (pos? n) (double? n)))
-
-(defn- valid-port?
-  "Returns true if n is an integer in the range [0, 65536]"
-  [n]
-  #(s/int-in-range? 0 65537 n))
-
-(defn- non-empty-string?
-  "Returns true if s is a non-empty string"
-  [s]
-  (and (string? s) (not (str/blank? s))))
+            [clojure.test :refer :all]
+            [com.gfredericks.test.chuck.generators :as gen']
+            [cook.mesos.api :as api]))
 
 ; Helpers
-(s/def :cook/string-map (s/map-of non-empty-string? string?))
+(s/def :cook/non-empty-string (s/and string? (complement str/blank?)))
+(s/def :cook/string-map (s/map-of :cook/non-empty-string string?))
+(s/def :cook/pos-double (s/and double? pos?))
+(s/def :cook/port (s/int-in 0 65537))
 
 ; Required job fields
 (s/def :cook.job/command string?)
-(s/def :cook.job/cpus pos-double?)
+(s/def :cook.job/cpus :cook/pos-double)
 (s/def :cook.job/max-retries pos-int?)
 (s/def :cook.job/max-runtime pos-int?)
-(s/def :cook.job/mem pos-double?)
+(s/def :cook.job/mem :cook/pos-double)
 (s/def :cook.job/name (s/and string? api/max-128-characters-and-alphanum?))
-(s/def :cook.job/priority #(s/int-in-range? 0 101 %))
-(s/def :cook.job/user (s/and string? #(re-matches #"\A[a-z][a-z0-9_-]{0,62}[a-z0-9]\z" %)))
+(s/def :cook.job/priority (s/int-in 0 101))
+(s/def :cook.job/user (s/with-gen
+                        (s/and string? #(re-matches #"\A[a-z][a-z0-9_-]{0,62}[a-z0-9]\z" %))
+                        #(gen'/string-from-regex #"[a-z][a-z0-9_-]{0,62}[a-z0-9]")))
 (s/def :cook.job/uuid uuid?)
 
 ; Job application
@@ -49,8 +41,8 @@
 (s/def :cook.docker/parameter (s/keys :req-un [:cook.docker-param/key
                                                :cook.docker-param/value]))
 (s/def :cook.docker/parameters (s/coll-of :cook.docker/parameter :kind vector?))
-(s/def :cook.docker-port-mapping/host-port valid-port?)
-(s/def :cook.docker-port-mapping/container-port valid-port?)
+(s/def :cook.docker-port-mapping/host-port :cook/port)
+(s/def :cook.docker-port-mapping/container-port :cook/port)
 (s/def :cook.docker-port-mapping/protocol string?)
 (s/def :cook.docker/port-mapping-instance (s/keys :req-un [:cook.docker-port-mapping/host-port
                                                            :cook.docker-port-mapping/container-port]
@@ -61,13 +53,13 @@
                                                :cook.docker/force-pull-image
                                                :cook.docker/parameters
                                                :cook.docker/port-mapping]))
-(s/def :cook.docker-volume/host-path string?)
-(s/def :cook.docker-volume/container-path string?)
-(s/def :cook.docker-volume/mode string?)
-(s/def :cook.docker/volume (s/keys :req-un [:cook.docker-volume/host-path]
-                                   :opt-un [:cook.docker-volume/container-path
-                                            :cook.docker-volume/mode]))
-(s/def :cook.docker/volumes (s/coll-of :cook.docker/volume :kind vector?))
+(s/def :cook.container-volume/host-path string?)
+(s/def :cook.container-volume/container-path string?)
+(s/def :cook.container-volume/mode string?)
+(s/def :cook.container/volume (s/keys :req-un [:cook.container-volume/host-path]
+                                      :opt-un [:cook.container-volume/container-path
+                                               :cook.container-volume/mode]))
+(s/def :cook.container/volumes (s/coll-of :cook.container/volume :kind vector?))
 (s/def :cook.job/container (s/keys :req-un [:cook.container/type]
                                    :opt-un [:cook.container/docker
                                             :cook.container/volumes]))
@@ -86,7 +78,7 @@
 ; Other optional job fields
 (s/def :cook.job/disable-mea-culpa-retries boolean?)
 (s/def :cook.job/env :cook/string-map)
-(s/def :cook.job/gpus pos-int?)
+(s/def :cook.job/gpus (s/int-in 1 Integer/MAX_VALUE))
 (s/def :cook.job/group uuid?)
 (s/def :cook.job/labels :cook/string-map)
 (s/def :cook.job/ports nat-int?)
@@ -111,29 +103,3 @@
                    :cook.job/labels
                    :cook.job/ports
                    :cook.job/uris]))
-
-; Scratch
-(deftest test-make-job-txn
-  (api/make-job-txn {:foo 1
-                     :bar 2
-                     :baz 3}))
-
-(defn- validate-job
-  "TODO(DPO)"
-  [job]
-  (let [task-constraints {:cpus (-> job :cpus inc)
-                          :memory-gb (-> job :mem (/ 1024) inc)}]
-    (api/validate-and-munge-job nil "alice" task-constraints nil nil job)))
-
-(deftest test-validate-and-munge-job
-
-  (is (validate-job (minimal-job)))
-
-  ;; command
-  (is (validate-job (assoc (minimal-job) :command "this is a command, and it must be a string")))
-  (is (thrown? Throwable (validate-job (assoc (minimal-job) :command 1))))
-  (is (thrown? Throwable (validate-job (assoc (minimal-job) :command true))))
-  (is (thrown? Throwable (validate-job (assoc (minimal-job) :command {}))))
-
-  ;; cpus
-  (is (validate-job (assoc (minimal-job) :cpus "this is a command, and it must be a string"))))

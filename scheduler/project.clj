@@ -145,7 +145,8 @@
                                                        javax.jms/jms
                                                        com.sun.jdmk/jmxtools
                                                        com.sun.jmx/jmxri]]
-                   [ring/ring-jetty-adapter "1.5.0"]]
+                   [ring/ring-jetty-adapter "1.5.0"]
+                   [com.gfredericks/test.chuck "0.2.7"]]
     :jvm-opts ["-Xms2G"
                "-XX:-OmitStackTraceInFastThrow"
                "-Xmx2G"
