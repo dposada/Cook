@@ -103,3 +103,15 @@
                    :cook.job/labels
                    :cook.job/ports
                    :cook.job/uris]))
+
+; Datomic datom
+(s/def :cook-datom/assertion (s/and keyword? #(= % :db/add)))
+(s/def :cook-datom/entity (s/keys :req-un [:cook-datom/part
+                                           :cook-datom/idx]))
+(s/def :cook/datom (s/or
+                     :map (s/keys :req [:db/id])
+                     :tuple (s/tuple :cook-datom/assertion :cook-datom/entity keyword? any?)))
+
+(s/fdef api/make-job-txn
+        :args (s/cat :job :cook/job)
+        :ret (s/coll-of :cook/datom))
