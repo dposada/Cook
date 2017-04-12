@@ -58,3 +58,9 @@
 
 (deftest test-check-make-job-txn
   (is-not-failure (check' `api/make-job-txn 100)))
+
+;(deftest test-instrument-make-job-txn
+;  (let [conn (restore-fresh-database! "datomic:mem://mesos-api-test")
+;        jobs (sample-job)]
+;    (api/create-jobs! conn {::api/jobs [job]}))
+;  )
