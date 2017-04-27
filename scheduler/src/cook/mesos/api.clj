@@ -92,31 +92,31 @@
                 (->snake_case k)))
             schema))
 
-(def PosNum
+(s/defschema PosNum
   (s/both s/Num (s/pred pos? 'pos?)))
 
-(def PosInt
+(s/defschema PosInt
   (s/both s/Int (s/pred pos? 'pos?)))
 
-(def NonNegInt
+(s/defschema NonNegInt
   (s/both s/Int (s/pred (comp not neg?) 'non-negative?)))
 
-(def PosDouble
+(s/defschema PosDouble
   (s/both double (s/pred pos? 'pos?)))
 
-(def UserName
+(s/defschema UserName
   (s/both s/Str (s/pred #(re-matches #"\A[a-z][a-z0-9_-]{0,62}[a-z0-9]\z" %) 'lowercase-alphanum?)))
 
-(def NonEmptyString
+(s/defschema NonEmptyString
   (s/both s/Str (s/pred #(not (zero? (count %))) 'not-empty-string)))
 
-(def PortMapping
+(s/defschema PortMapping
   "Schema for Docker Portmapping"
   {:host-port (s/both s/Int (s/pred #(<= 0 % 65536) 'between-0-and-65536))
    :container-port (s/both s/Int (s/pred #(<= 0 % 65536) 'between-0-and-65536))
    (s/optional-key :protocol) s/Str})
 
-(def DockerInfo
+(s/defschema DockerInfo
   "Schema for a DockerInfo"
   {:image s/Str
    (s/optional-key :network) s/Str
@@ -124,26 +124,26 @@
    (s/optional-key :parameters) [{:key s/Str :value s/Str}]
    (s/optional-key :port-mapping) [PortMapping]})
 
-(def Volume
+(s/defschema Volume
   "Schema for a Volume"
   {(s/optional-key :container-path) s/Str
    :host-path s/Str
    (s/optional-key :mode) s/Str})
 
-(def Container
+(s/defschema Container
   "Schema for a Mesos Container"
   {:type s/Str
    (s/optional-key :docker) DockerInfo
    (s/optional-key :volumes) [Volume]})
 
-(def Uri
+(s/defschema Uri
   "Schema for a Mesos fetch URI, which has many options"
   {:value s/Str
    (s/optional-key :executable?) s/Bool
    (s/optional-key :extract?) s/Bool
    (s/optional-key :cache?) s/Bool})
 
-(def UriRequest
+(s/defschema UriRequest
   "Schema for a Mesos fetch URI as it would be included in JSON requests
   or responses.  Avoids question-marks in the key names."
   {:value s/Str
@@ -151,7 +151,7 @@
    (s/optional-key :extract) s/Bool
    (s/optional-key :cache) s/Bool})
 
-(def Instance
+(s/defschema Instance
   "Schema for a description of a single job instance."
   {:status s/Str
    :task_id s/Uuid
@@ -181,7 +181,7 @@
   [s]
   (re-matches #"[\.a-zA-Z0-9_-]{1,128}" s))
 
-(def Application
+(s/defschema Application
   "Schema for the application a job corresponds to"
   {:name (s/constrained s/Str non-empty-max-128-characters-and-alphanum?)
    :version (s/constrained s/Str non-empty-max-128-characters-and-alphanum?)})
@@ -209,7 +209,7 @@
    :max-retries PosInt
    :max-runtime PosInt
    (s/optional-key :uris) [Uri]
-   (s/optional-key :ports) (s/pred #(not (neg? %)) 'nonnegative?)
+   (s/optional-key :ports) NonNegInt
    (s/optional-key :env) {NonEmptyString s/Str}
    (s/optional-key :labels) {NonEmptyString s/Str}
    (s/optional-key :container) Container
@@ -224,7 +224,7 @@
    (s/optional-key :application) Application
    (s/optional-key :expected-runtime) PosInt})
 
-(def Job
+(s/defschema Job
   "Full schema for a job"
   (s/constrained JobMap valid-runtimes?))
 
@@ -244,11 +244,13 @@
               :cpus PosNum
               :mem PosNum})))
 
-(def JobRequest
+(s/defschema JobRequest
   "Schema for the part of a request that launches a single job."
-  (s/constrained JobRequestMap valid-runtimes?))
+  (-> JobRequestMap
+      prepare-schema-response
+      (s/constrained valid-runtimes?)))
 
-(def JobResponse
+(s/defschema JobResponse
   "Schema for a description of a job (as returned by the API).
   The structure is similar to JobRequest, but has some differences.
   For example, it can include descriptions of instances for the job."
@@ -265,21 +267,21 @@
               (s/optional-key :instances) [Instance]})
       prepare-schema-response))
 
-(def JobOrInstanceIds
+(s/defschema JobOrInstanceIds
   "Schema for any number of job and/or instance uuids"
   {(s/optional-key :job) [s/Uuid]
    (s/optional-key :instance) [s/Uuid]})
 
-(def Attribute-Equals-Parameters
+(s/defschema Attribute-Equals-Parameters
   "A schema for the parameters of a host placement with type attribute-equals"
   {:attribute s/Str})
 
-(def Balanced-Parameters
+(s/defschema Balanced-Parameters
   "A schema for the parameters of a host placement with type balanced"
   {:attribute s/Str
    :minimum PosInt})
 
-(def HostPlacement
+(s/defschema HostPlacement
   "A schema for host placement"
   (s/conditional
     #(= (:type %) :attribute-equals)
@@ -293,11 +295,11 @@
                      'host-placement-type-exists?)
        (s/optional-key :parameters) {}}))
 
-(def Quantile-Deviation-Parameters
+(s/defschema Quantile-Deviation-Parameters
   {:multiplier (s/both s/Num (s/pred #(> % 1.0) 'greater-than-one))
    :quantile (s/both s/Num (s/pred #(< 0.0 % 1.0) 'between-zero-one))})
 
-(def StragglerHandling
+(s/defschema StragglerHandling
   "A schema for host placement"
   (s/conditional
     #(= (:type %) :quantile-deviation)
@@ -308,14 +310,15 @@
                      'straggler-handling-type-exists?)
        (s/optional-key :parameters) {}}))
 
-(def Group
+(s/defschema Group
   "A schema for a job group"
   {:uuid s/Uuid
-   (s/optional-key :host-placement) HostPlacement
-   (s/optional-key :straggler-handling) StragglerHandling
+   ; TODO(DPO): Uncomment these lines
+   ;(s/optional-key :host-placement) HostPlacement
+   ;(s/optional-key :straggler-handling) StragglerHandling
    (s/optional-key :name) s/Str})
 
-(def GroupResponse
+(s/defschema GroupResponse
   "A schema for a group http response"
   (-> Group
       (merge
@@ -325,7 +328,7 @@
           (s/optional-key :completed) s/Int})
       prepare-schema-response))
 
-(def RawSchedulerRequest
+(s/defschema RawSchedulerRequest
   "Schema for a request to the raw scheduler endpoint."
   {:jobs [JobRequest]
    (s/optional-key :override-group-immutability) s/Bool
@@ -1149,13 +1152,13 @@
 ;; /retry
 ;;
 
-(def ReadRetriesRequest
+(s/defschema ReadRetriesRequest
   {:job [s/Uuid]})
 
-(def UpdateRetriesRequest
+(s/defschema UpdateRetriesRequest
   {(s/optional-key :job) s/Uuid
    (s/optional-key :jobs) [s/Uuid]
-   (s/optional-key :retries) PosNum
+   (s/optional-key :retries) PosInt
    (s/optional-key :increment) PosNum})
 
 (defn display-retries
@@ -1294,9 +1297,9 @@
     :put! (partial retry-jobs! conn)}))
 
 ;; /share and /quota
-(def UserParam {:user s/Str})
+(s/defschema UserParam {:user s/Str})
 
-(def UserLimitsResponse
+(s/defschema UserLimitsResponse
   {String s/Num})
 
 (defn set-limit-params

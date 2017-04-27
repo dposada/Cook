@@ -5,7 +5,10 @@ import time
 import unittest
 import uuid
 
+import sys
 from retrying import retry
+
+from cook.client import CookClient
 
 
 def is_connection_error(exception):
@@ -20,11 +23,12 @@ class CookTest(unittest.TestCase):
         # if connection is refused, an exception will be thrown
         self.session.get(self.cook_url)
 
-    @retry(stop_max_delay=120000, wait_fixed=1000)
     def wait_for_job(self, job_id, status):
-        job = self.session.get('%s/rawscheduler?job=%s' % (self.cook_url, job_id))
-        self.assertEqual(200, job.status_code)
-        job = job.json()[0]
+        okay, jobs, resp = self.client.await_jobs([job_id], status=status)
+        self.assertTrue(okay)
+        self.assertEqual(1, len(jobs))
+        self.assertEqual(200, resp.status_code)
+        job = jobs[0]
         if not job['status'] == status:
             error_msg = 'Job %s had status %s - expected %s' % (job_id, job['status'], status)
             self.logger.info(error_msg)
@@ -56,18 +60,19 @@ class CookTest(unittest.TestCase):
     def setUp(self):
         self.cook_url = os.getenv('COOK_SCHEDULER_URL', 'http://localhost:12321')
         self.session = requests.Session()
+        self.client = CookClient(url=self.cook_url)
         self.logger = logging.getLogger(__name__)
         self.wait_for_cook()
 
     def submit_job(self, **kwargs):
         job_spec = self.minimal_job(**kwargs)
-        request_body = {'jobs': [job_spec]}
-        resp = self.session.post('%s/rawscheduler' % self.cook_url, json=request_body)
+        _, result, resp = self.client.create_jobs([job_spec])
+        self.logger.info('Create jobs result: %s' % result)
         return job_spec['uuid'], resp
 
     def test_basic_submit(self):
         job_uuid, resp = self.submit_job()
-        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(201, resp.status_code, resp.json())
         job = self.wait_for_job(job_uuid, 'completed')
         self.assertEqual('success', job['instances'][0]['status'])
 
@@ -88,19 +93,19 @@ class CookTest(unittest.TestCase):
 
     # load a job by UUID using GET /rawscheduler
     def get_job(self, job_uuid):
-        return self.session.get('%s/rawscheduler?job=%s' % (self.cook_url, job_uuid)).json()[0]
+        _, result, _ = self.client.poll_jobs([job_uuid])
+        return result[0]
 
     def test_get_job(self):
         # schedule a job
         job_spec = self.minimal_job()
-        resp = self.session.post('%s/rawscheduler' % self.cook_url,
-                                 json={'jobs': [job_spec]})
+        _, resp = self.submit_job(**job_spec)
         self.assertEqual(201, resp.status_code)
 
         # query for the same job & ensure the response has what it's supposed to have
         job = self.wait_for_job(job_spec['uuid'], 'completed')
         self.assertEquals(job_spec['mem'], job['mem'])
-        self.assertEquals(job_spec['max_retries'], job['max_retries'])
+        self.assertEquals(job_spec['max-retries'], job['max_retries'])
         self.assertEquals(job_spec['name'], job['name'])
         self.assertEquals(job_spec['priority'], job['priority'])
         self.assertEquals(job_spec['uuid'], job['uuid'])
@@ -131,15 +136,14 @@ class CookTest(unittest.TestCase):
 
     def determine_user(self):
         job_spec = self.minimal_job()
-        request_body = {'jobs': [job_spec]}
-        resp = self.session.post('%s/rawscheduler' % self.cook_url, json=request_body)
+        _, resp = self.submit_job(**job_spec)
         self.assertEqual(resp.status_code, 201)
         return self.get_job(job_spec['uuid'])['user']
 
     def test_list_jobs_by_state(self):
         # schedule a bunch of jobs in hopes of getting jobs into different statuses
-        request_body = {'jobs': [self.minimal_job(command="sleep %s" % i) for i in range(1, 20)]}
-        resp = self.session.post('%s/rawscheduler' % self.cook_url, json=request_body)
+        jobs = [self.minimal_job(command="sleep %s" % i) for i in range(1, 20)]
+        _, _, resp = self.client.create_jobs(jobs)
         self.assertEqual(resp.status_code, 201)
 
         # let some jobs get scheduled
@@ -151,21 +155,18 @@ class CookTest(unittest.TestCase):
             self.assertEqual(200, resp.status_code)
             jobs = resp.json()
             for job in jobs:
-                # print "%s %s" % (job['uuid'], job['status'])
                 self.assertEquals(state, job['status'])
 
     def test_list_jobs_by_time(self):
         # schedule two jobs with different submit times
         job_specs = [self.minimal_job() for _ in range(2)]
 
-        request_body = {'jobs': [job_specs[0]]}
-        resp = self.session.post('%s/rawscheduler' % self.cook_url, json=request_body)
+        _, _, resp = self.client.create_jobs(job_specs[:1])
         self.assertEqual(resp.status_code, 201)
 
         time.sleep(1)
 
-        request_body = {'jobs': [job_specs[1]]}
-        resp = self.session.post('%s/rawscheduler' % self.cook_url, json=request_body)
+        _, _, resp = self.client.create_jobs(job_specs[-1:])
         self.assertEqual(resp.status_code, 201)
 
         submit_times = [self.get_job(job_spec['uuid'])['submit_time'] for job_spec in job_specs]
@@ -209,36 +210,33 @@ class CookTest(unittest.TestCase):
     def test_cancel_job(self):
         job_uuid, _ = self.submit_job(command='sleep 300')
         self.wait_for_job(job_uuid, 'running')
-        resp = self.session.delete(
-            '%s/rawscheduler?job=%s' % (self.cook_url, job_uuid))
+        _, _, resp = self.client.delete_jobs([job_uuid])
         self.assertEqual(204, resp.status_code)
-        job = self.session.get(
-            '%s/rawscheduler?job=%s' % (self.cook_url, job_uuid)).json()[0]
+        job = self.get_job(job_uuid)
         self.assertEqual('failed', job['state'])
 
     def test_change_retries(self):
         job_uuid, _ = self.submit_job(command='sleep 10')
         self.wait_for_job(job_uuid, 'running')
-        resp = self.session.delete(
-            '%s/rawscheduler?job=%s' % (self.cook_url, job_uuid))
+        _, _, resp = self.client.delete_jobs([job_uuid])
         self.assertEqual(204, resp.status_code)
-        job = self.session.get(
-            '%s/rawscheduler?job=%s' % (self.cook_url, job_uuid)).json()[0]
+        job = self.get_job(job_uuid)
         self.assertEqual('failed', job['state'])
-        resp = self.session.put('%s/retry' % self.cook_url, json={'retries': 2, 'jobs': [job_uuid]})
+        _, _, resp = self.client.retry_jobs([job_uuid], retries=2)
         self.assertEqual(201, resp.status_code, resp.text)
-        job = self.session.get(
-            '%s/rawscheduler?job=%s' % (self.cook_url, job_uuid)).json()[0]
+        job = self.get_job(job_uuid)
         self.assertEqual('waiting', job['status'])
         job = self.wait_for_job(job_uuid, 'completed')
         self.assertEqual('success', job['state'])
 
     def test_cancel_instance(self):
-        job_uuid, _ = self.submit_job(command='sleep 10', max_retries=2)
+        job_uuid, resp = self.submit_job(command='sleep 10', max_retries=2)
+        self.assertEqual(201, resp.status_code, resp.json())
         job = self.wait_for_job(job_uuid, 'running')
         task_id = job['instances'][0]['task_id']
-        resp = self.session.delete(
-            '%s/rawscheduler?instance=%s' % (self.cook_url, task_id))
+        # resp = self.session.delete(
+        #     '%s/rawscheduler?instance=%s' % (self.cook_url, task_id))
+        _, _, resp = self.client.delete_instances([task_id])
         self.assertEqual(204, resp.status_code)
         job = self.wait_for_job(job_uuid, 'completed')
         self.assertEqual('success', job['state'])
