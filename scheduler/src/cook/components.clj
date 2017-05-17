@@ -203,11 +203,23 @@
   (get-ttl [self req]
     ttl))
 
+(defn user-agent-middleware
+  "TODO(DPO)"
+  [handler user-agent-metrics-regex]
+  (fn [req]
+    (when user-agent-metrics-regex
+      (let [user-agent (:user-agent req)
+            matches (re-matches user-agent-metrics-regex user-agent)]
+        (when (> (count matches) 1)
+          (let [counter (metrics.counters/counter ["cook-mesos" "user-agent" user-agent])]))))
+    (handler req)))
+
 (def scheduler-server
   (graph/eager-compile
     {:mesos-datomic mesos-datomic
      :route full-routes
-     :http-server (fnk [[:settings server-port authorization-middleware [:rate-limit user-limit]] [:route view]]
+     :http-server (fnk [[:settings server-port authorization-middleware [:rate-limit user-limit]] [:route view]
+                        user-agent-metrics-regex]
                     (log/info "Launching http server")
                     (let [rate-limit-storage (storage/local-storage)
                           jetty ((lazy-load-var 'qbits.jet.server/run-jetty)
@@ -222,6 +234,7 @@
                                                      wrap-cookies
                                                      wrap-params
                                                      health-check-middleware
+                                                     (user-agent-middleware user-agent-metrics-regex)
                                                      instrument)
                                    :join? false
                                    :configurator configure-jet-logging
@@ -434,7 +447,10 @@
                      (when enabled?
                        (when (zero? port)
                          (throw (ex-info "You enabled nrepl but didn't configure a port. Please configure a port in your config file." {})))
-                       ((lazy-load-var 'clojure.tools.nrepl.server/start-server) :port port)))}))
+                       ((lazy-load-var 'clojure.tools.nrepl.server/start-server) :port port)))
+
+     :user-agent-metrics-regex (fnk [[:config {user-agent-metrics-regex nil}]]
+                                 user-agent-metrics-regex)}))
 
 (defn- init-logger
   ([] (init-logger {:levels {"datomic.db" :warn
