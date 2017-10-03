@@ -5,7 +5,7 @@ import os
 from urllib.parse import urlparse
 
 from cook import util, http, colors, metrics
-from cook.subcommands import submit, show, wait, list
+from cook.subcommands import submit, show, wait, list, logs
 from cook.util import deep_merge, load_first_json_file
 
 # Default locations to check for configuration files if one isn't given on the command line
@@ -39,7 +39,8 @@ subparsers = parser.add_subparsers(dest='action')
 actions = {'submit': submit.register(subparsers.add_parser, add_defaults),
            'show': show.register(subparsers.add_parser, add_defaults),
            'wait': wait.register(subparsers.add_parser, add_defaults),
-           'list': list.register(subparsers.add_parser, add_defaults)}
+           'list': list.register(subparsers.add_parser, add_defaults),
+           'logs': logs.register(subparsers.add_parser, add_defaults)}
 
 
 def load_target_clusters(config, url=None, cluster=None):

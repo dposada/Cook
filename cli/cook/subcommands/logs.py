@@ -1,6 +1,7 @@
 import json
 
 from cook import colors
+from cook.subcommands.show import query
 from cook.util import strip_all, print_info
 
 
@@ -11,36 +12,39 @@ def print_no_data(clusters):
     print_info('Do you need to add another cluster to your configuration?')
 
 
-def show_job_logs(cluster_name, jobs):
+def retrieve_paths(instance):
     """TODO(DPO)"""
-    pass
+    print(instance)
+    return []
 
 
-def show_instance_logs(cluster_name, instances):
+def retrieve_logs(clusters, uuids, path):
     """TODO(DPO)"""
-    pass
-
-
-def show_group_logs(cluster_name, groups):
-    """TODO(DPO)"""
-    pass
+    query_result = query(clusters, uuids)
+    for cluster_name, entities in query_result['clusters'].items():
+        ij_pairs = [(i, j) for j in entities['jobs'] for i in j['instances']]
+        ij_pairs.extend([(i, j) for j in entities['instances'] for i in j['instances'] if i['task_id'] in uuids])
+        id_to_instance_job_pair = {i['task_id']: (i, j) for (i, j) in ij_pairs}
+        # print(json.dumps(id_to_instance_job_pair, indent=2))
+        for (instance, job) in id_to_instance_job_pair.values():
+            paths = [path] if path else retrieve_paths(instance)
+            for path in paths:
+                header = '=== Job: %s (%s), Instance: %s, Path: %s ===' % \
+                         (job['uuid'], job['name'], instance['task_id'], path)
+                print(header)
+    return {}
 
 
 def logs(clusters, args):
     """TODO(DPO)"""
     as_json = args.get('json')
     uuids = strip_all(args.get('uuid'))
-    query_result = {}
+    path = args.get('path')
+    query_result = retrieve_logs(clusters, uuids, path)
     if as_json:
         print(json.dumps(query_result))
     else:
-        for cluster_name, entities in query_result['clusters'].items():
-            jobs = entities['jobs']
-            instances = [[i, j] for j in entities['instances'] for i in j['instances'] if i['task_id'] in uuids]
-            groups = entities['groups']
-            show_job_logs(cluster_name, jobs)
-            show_instance_logs(cluster_name, instances)
-            show_group_logs(cluster_name, groups)
+        print('TODO')
     if query_result['count'] > 0:
         return 0
     else:
