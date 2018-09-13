@@ -775,6 +775,14 @@ def wait_for_running_instance(cook_url, job_id, max_wait_ms=DEFAULT_TIMEOUT_MS):
         job = resp.json()[0]
         if not job['instances']:
             logger.info(f"Job {job_id} has no instances.")
+            with UserFactory(None).admin():
+                pool = default_pool(cook_url) or 'no-pool'
+                logging.info(f'Checking the queue endpoint for pool {pool}')
+                resp = query_queue(cook_url)
+                for i, job in enumerate(resp.json()[pool]):
+                    if job['job/uuid'] == job_id:
+                        logging.info(f'Job {job_id} is at index {i} in the queue for pool {pool}')
+                        break
         else:
             for inst in job['instances']:
                 status = inst['status']
