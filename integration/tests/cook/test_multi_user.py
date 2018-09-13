@@ -228,8 +228,8 @@ class MultiUserCookTest(util.CookTest):
         user = self.user_factory.new_user()
         all_job_uuids = []
         try:
-            small_cpus = 0.1
-            large_cpus = small_cpus * 10
+            small_cpus = 1.0
+            large_cpus = small_cpus * 2.1
             with self.user_factory.admin():
                 # Lower the user's cpu share and quota
                 util.set_limit(self.cook_url, 'share', user.name, cpus=small_cpus, pool=pool)

@@ -767,10 +767,9 @@ def look_up_job_in_queue(cook_url, job_uuid):
     """TODO(DPO)"""
     with UserFactory(None).admin():
         pool = default_pool(cook_url) or 'no-pool'
-        limit = 2000
-        logging.info(f'Checking the queue endpoint for pool {pool} with limit {limit}')
+        logging.info(f'Checking the queue endpoint for pool {pool}')
         try:
-            resp = query_queue(cook_url, params={'limit':limit})
+            resp = query_queue(cook_url)
             pool_queue = resp.json()[pool]
             logging.info(f'/queue for pool {pool} has {len(pool_queue)} job(s)')
             for i, job in enumerate(pool_queue):
