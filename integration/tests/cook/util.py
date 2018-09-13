@@ -779,6 +779,8 @@ def wait_for_running_instance(cook_url, job_id, max_wait_ms=DEFAULT_TIMEOUT_MS):
                 pool = default_pool(cook_url) or 'no-pool'
                 logging.info(f'Checking the queue endpoint for pool {pool}')
                 resp = query_queue(cook_url)
+                logging.info(f'/queue response status was {resp.status_code}')
+                logging.info(f'/queue response text was {resp.text[:64]}')
                 for i, job in enumerate(resp.json()[pool]):
                     if job['job/uuid'] == job_id:
                         logging.info(f'Job {job_id} is at index {i} in the queue for pool {pool}')
