@@ -763,6 +763,26 @@ def wait_for_end_time(cook_url, job_id, max_wait_ms=DEFAULT_TIMEOUT_MS):
     return response.json()[0]
 
 
+def look_up_job_in_queue(cook_url, job_uuid):
+    """TODO(DPO)"""
+    with UserFactory(None).admin():
+        pool = default_pool(cook_url) or 'no-pool'
+        limit = 2000
+        logging.info(f'Checking the queue endpoint for pool {pool} with limit {limit}')
+        try:
+            resp = query_queue(cook_url, params={'limit':limit})
+            pool_queue = resp.json()[pool]
+            logging.info(f'/queue for pool {pool} has {len(pool_queue)} job(s)')
+            for i, job in enumerate(pool_queue):
+                if job['job/uuid'] == job_uuid:
+                    logging.info(f'Job {job_uuid} is at index {i} in the queue for pool {pool}')
+                    break
+            else:
+                logging.warning(f'Did not find job {job_uuid} in the queue for pool {pool}')
+        except Exception:
+            logging.exception('Exception when accessing /queue')
+
+
 def wait_for_running_instance(cook_url, job_id, max_wait_ms=DEFAULT_TIMEOUT_MS):
     """Waits for the job with the given job_id to have a running instance"""
     job_id = unpack_uuid(job_id)
@@ -775,16 +795,7 @@ def wait_for_running_instance(cook_url, job_id, max_wait_ms=DEFAULT_TIMEOUT_MS):
         job = resp.json()[0]
         if not job['instances']:
             logger.info(f"Job {job_id} has no instances.")
-            with UserFactory(None).admin():
-                pool = default_pool(cook_url) or 'no-pool'
-                logging.info(f'Checking the queue endpoint for pool {pool}')
-                resp = query_queue(cook_url)
-                logging.info(f'/queue response status was {resp.status_code}')
-                logging.info(f'/queue response text was {resp.text[:64]}')
-                for i, job in enumerate(resp.json()[pool]):
-                    if job['job/uuid'] == job_id:
-                        logging.info(f'Job {job_id} is at index {i} in the queue for pool {pool}')
-                        break
+            look_up_job_in_queue(cook_url, job_id)
         else:
             for inst in job['instances']:
                 status = inst['status']
@@ -1253,7 +1264,7 @@ def should_expect_sandbox_directory(instance):
         logging.info('The sandbox directory is not expected to get populated')
     return expect_sandbox
 
-  
+
 def should_expect_sandbox_directory_for_job(job):
     """
     Returns true if we should expect the sandbox directory
@@ -1262,9 +1273,10 @@ def should_expect_sandbox_directory_for_job(job):
     instance = job['instances'][0]
     return should_expect_sandbox_directory(instance)
 
-  
+
 def data_local_service_is_set():
     return os.getenv('DATA_LOCAL_SERVICE', None) is not None
+
 
 @functools.lru_cache()
 def _fenzo_fitness_calculator():
@@ -1275,6 +1287,7 @@ def _fenzo_fitness_calculator():
     fitness_calculator = get_in(settings(cook_url), 'fenzo-fitness-calculator')
     logger.info(f"Cook's fitness calculator is {fitness_calculator}")
     return fitness_calculator
+
 
 def using_data_local_fitness_calculator():
     return _fenzo_fitness_calculator() == 'cook.mesos.data-locality/make-data-local-fitness-calculator'
