@@ -225,13 +225,12 @@ class MultiUserCookTest(util.CookTest):
         5. Submit a job, J2, from X with 0.1 cpu and priority 100
         6. Wait until J1 is preempted (to make room for J2)
         """
-        admin = self.user_factory.admin()
         user = self.user_factory.new_user()
         all_job_uuids = []
         try:
             small_cpus = 0.1
             large_cpus = small_cpus * 10
-            with admin:
+            with self.user_factory.admin():
                 # Lower the user's cpu share and quota
                 util.set_limit(self.cook_url, 'share', user.name, cpus=small_cpus, pool=pool)
                 util.set_limit(self.cook_url, 'quota', user.name, cpus=large_cpus, pool=pool)
@@ -275,7 +274,7 @@ class MultiUserCookTest(util.CookTest):
             self.logger.info(f'Waiting up to {max_wait_ms} milliseconds for preemption to happen')
             util.wait_until(low_priority_job, job_was_preempted, max_wait_ms=max_wait_ms, wait_interval_ms=5000)
         finally:
-            with admin:
+            with self.user_factory.admin():
                 util.kill_jobs(self.cook_url, all_job_uuids, assert_response=False)
                 util.reset_limit(self.cook_url, 'share', user.name, reason=self.current_name(), pool=pool)
                 util.reset_limit(self.cook_url, 'quota', user.name, reason=self.current_name(), pool=pool)

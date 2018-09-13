@@ -768,7 +768,8 @@ def wait_for_running_instance(cook_url, job_id, max_wait_ms=DEFAULT_TIMEOUT_MS):
     job_id = unpack_uuid(job_id)
 
     def query():
-        return query_jobs(cook_url, True, uuid=[job_id])
+        with UserFactory(None).default():
+            return query_jobs(cook_url, True, uuid=[job_id])
 
     def predicate(resp):
         job = resp.json()[0]
