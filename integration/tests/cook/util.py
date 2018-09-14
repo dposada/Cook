@@ -770,7 +770,8 @@ def look_up_job_in_queue(cook_url, job_uuid):
         logging.info(f'Checking the queue endpoint for pool {pool}')
         try:
             resp = query_queue(cook_url)
-            pool_queue = resp.json()[pool]
+            resp_json = resp.json()
+            pool_queue = resp_json[pool] if pool in resp_json else resp_json['normal']
             logging.info(f'/queue for pool {pool} has {len(pool_queue)} job(s)')
             for i, job in enumerate(pool_queue):
                 if job['job/uuid'] == job_uuid:
