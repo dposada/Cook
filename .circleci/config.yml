@@ -32,6 +32,13 @@ jobs:
       - checkout
       - run: cd scheduler && lein uberjar
 
+  integration_basic_auth:
+    docker:
+      - image: dposada/cook-integration:latest
+    steps:
+      - checkout
+      - run: cd integration && pip install --user -r requirements.txt && travis/run_integration.sh --auth=http-basic
+
 workflows:
   version: 2
   cook:
@@ -52,3 +59,11 @@ workflows:
           filters:
             branches:
               only: circleci
+
+      - integration_basic_auth:
+          requires:
+            - scheduler_build
+          filters:
+            branches:
+              only: circleci
+
