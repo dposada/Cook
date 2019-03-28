@@ -1,35 +1,30 @@
 version: 2
 
 jobs:
-  cook_scheduler_and_job_client_unit_tests:
+  cook_scheduler_unit_tests:
     docker:
-      - image: circleci/openjdk:8-jdk-browsers
+      - image: circleci/clojure:openjdk-8-lein-2.9.1
     steps:
       - checkout
-      - run: cd scheduler && TRAVIS_BUILD_DIR=.. ./travis/setup.sh
-      - run: pushd ../jobclient && mvn test
-      - run: popd && lein with-profile +test test :all-but-benchmark
+      - run: cd scheduler && lein test :all-but-benchmark
   
-  cook_scheduler_integration_tests_with_http_basic_auth:
+  cook_scheduler_build:
     docker:
-      - image: circleci/openjdk:8-jdk-browsers
+      - image: circleci/clojure:openjdk-8-lein-2.9.1
     steps:
       - checkout
-      - run: wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein
-      - run: mkdir ~/bin && mv lein ~/bin && chmod a+x ~/bin/lein
-      - run: echo 'export PATH=~/bin:$PATH' >> $BASH_ENV
-      - run: cd integration && TRAVIS_BUILD_DIR=.. ./travis/prepare_integration.sh
-      - run: ./travis/run_integration.sh --auth=http-basic
+      - run: cd scheduler && lein uberjar
 
 workflows:
   version: 2
   build_and_test:
     jobs:
-      - cook_scheduler_and_job_client_unit_tests:
+      - cook_scheduler_unit_tests:
           filters:
             branches:
               only: circleci
-      - cook_scheduler_integration_tests_with_http_basic_auth:
+
+      - cook_scheduler_build:
           filters:
             branches:
               only: circleci
