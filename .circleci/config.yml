@@ -14,7 +14,7 @@ jobs:
           paths:
             - cook-jobclient
 
-  cook_scheduler_unit_tests:
+  scheduler_unit_tests:
     docker:
       - image: circleci/clojure:openjdk-8-lein-2.9.1
     steps:
@@ -25,7 +25,7 @@ jobs:
       - run: cp -r /tmp/workspace/cook-jobclient/ ${HOME}/.m2/repository/twosigma/
       - run: cd scheduler && lein test :all-but-benchmark
   
-  cook_scheduler_build:
+  scheduler_build:
     docker:
       - image: circleci/clojure:openjdk-8-lein-2.9.1
     steps:
@@ -34,21 +34,21 @@ jobs:
 
 workflows:
   version: 2
-  build_and_test:
+  cook:
     jobs:
       - java_job_client:
           filters:
             branches:
               only: circleci
 
-      - cook_scheduler_unit_tests:
+      - scheduler_unit_tests:
           requires:
             - java_job_client
           filters:
             branches:
               only: circleci
 
-      - cook_scheduler_build:
+      - scheduler_build:
           filters:
             branches:
               only: circleci
