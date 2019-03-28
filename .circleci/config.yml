@@ -37,7 +37,7 @@ jobs:
       - image: dposada/cook-integration:latest
     steps:
       - checkout
-      - run: cd integration && pip install --user -r requirements.txt && travis/run_integration.sh --auth=http-basic
+      - run: cd integration && pip install --user -r requirements.txt && TRAVIS_BUILD_DIR=.. travis/run_integration.sh --auth=http-basic
 
 workflows:
   version: 2
