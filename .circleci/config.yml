@@ -21,6 +21,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: /tmp/workspace
+      - run: mkdir -p ${HOME}/.m2/repository/twosigma/
       - run: cp -r /tmp/workspace/cook-jobclient/ ${HOME}/.m2/repository/twosigma/
       - run: cd scheduler && lein test :all-but-benchmark
   
